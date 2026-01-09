@@ -32,7 +32,7 @@ load_dotenv(dotenv_path=env_path)
 # Debug check
 api_key = os.getenv("TAVILY_API_KEY")
 if not api_key:
-    # Fallback: Try loading from current working directory just in case
+    # Fallback: Try loading from current working directory
     load_dotenv()
     api_key = os.getenv("TAVILY_API_KEY")
 
@@ -52,10 +52,10 @@ except ImportError:
 print("📥 Loading Embedding Model...")
 embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-# Initialize Search Tool with EXPLICIT key to fix Pydantic error
+# Initialize Search Tool with EXPLICIT key and k=20 for batching support
 search_tool = TavilySearchResults(
-    k=10,
-    tavily_api_key=api_key  # <--- THIS IS THE KEY FIX
+    max_results=20,  
+    tavily_api_key=api_key 
 )
 
 TEMP_DIR = "temp_uploads"
@@ -230,30 +230,21 @@ def process_direct_url(url: str):
 
 def process_topic_search_api(topic: str):
     """
-    Backend version of 'process_topic_search'.
-    Searches Tavily, picks top 5 results, scrapes, and ingests them automatically.
+    Legacy auto-ingest for topic.
     """
-    print(f"\n🔎 API Searching web for: '{topic}'...")
     try:
-        # Pass query explicitly
         results = search_tool.invoke({"query": topic})
-        
-        # Depending on version, results might be a list or dict. Handle safely:
         if isinstance(results, dict) and 'results' in results:
             results = results['results']
             
         urls = [r["url"] for r in results if "url" in r]
-        
-        # Deduplicate and limit to top 5
         urls = list(dict.fromkeys(urls))[:5]
         
-        if not urls:
-            return 0
+        if not urls: return 0
             
         print(f"   📄 Scraping {len(urls)} URLs...")
         loader = WebBaseLoader(urls)
         docs = loader.load()
-        
         return run_ingestion_pipeline(docs)
         
     except Exception as e:
@@ -261,29 +252,21 @@ def process_topic_search_api(topic: str):
         return 0
 
 async def process_uploaded_file_api(file):
-    """
-    Handles physical file uploads (PDF, TXT, Audio) from Streamlit.
-    """
+    """Handles physical file uploads."""
     file_path = os.path.join(TEMP_DIR, file.filename)
-    
     try:
-        # Save file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
-        doc = None
         
-        # Audio check
+        doc = None
         if file.filename.endswith((".mp3", ".wav", ".m4a")):
             doc = load_audio(file_path)
         else:
-            # Standard docs
             doc = load_local_file(file_path)
             
         if doc:
             return run_ingestion_pipeline([doc])
         return 0
-        
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)

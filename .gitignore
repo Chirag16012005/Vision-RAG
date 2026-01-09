@@ -1,2 +1,4 @@
 myenv/
 *.env
+volumes/
+__pycache__/
