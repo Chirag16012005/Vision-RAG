@@ -1,107 +1,117 @@
+import re
 import os
-from typing import List, Optional
-
+import hashlib
+from dotenv import load_dotenv
 from pymilvus import (
-    Collection,
-    CollectionSchema,
-    DataType,
-    FieldSchema,
     connections,
+    Collection,
     utility,
+    FieldSchema, 
+    CollectionSchema, 
+    DataType
 )
 
-MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
-MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-COLLECTION_NAME = os.getenv("MILVUS_COLLECTION", "documents")
-DEFAULT_DIM = int(os.getenv("EMBEDDING_DIM", "768"))
-TEXT_MAX_LENGTH = int(os.getenv("MILVUS_TEXT_MAX_LENGTH", "4096"))
-INDEX_TYPE = os.getenv("MILVUS_INDEX_TYPE", "IVF_FLAT")
-METRIC_TYPE = os.getenv("MILVUS_METRIC_TYPE", "IP")
-NLIST = int(os.getenv("MILVUS_NLIST", "1024"))
-NPROBE = int(os.getenv("MILVUS_NPROBE", "16"))
+load_dotenv()
 
+# --- CONNECT TO MILVUS ---
+try:
+    connections.connect(alias="default", host="localhost", port="19530")
+    print("✅ Connected to Milvus Database")
+except Exception as e:
+    print(f"⚠️ Milvus Connection Error: {e}")
 
-def _connect() -> None:
-    if connections.has_connection("default"):
-        return
-    connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
+def sanitize_collection_name(filename: str) -> str:
+    """
+    Converts a filename/URL into a valid, safe Milvus collection name.
+    1. Removes special chars.
+    2. Truncates if too long (Milvus limit is ~255 chars).
+    3. Adds hash to ensure uniqueness if truncated.
+    """
+    # 1. Replace non-alphanumeric chars with underscore
+    clean = re.sub(r'[^a-zA-Z0-9]', '_', filename)
+    
+    # 2. Safety Truncation (Keep it under 100 chars to be safe)
+    if len(clean) > 100:
+        # Create a unique hash of the FULL original name
+        hash_suffix = hashlib.md5(filename.encode()).hexdigest()[:8]
+        # Take first 90 chars + underscore + 8 char hash
+        clean = clean[:90] + "_" + hash_suffix
+        
+    # 3. Prefix with 'col_' to ensure it starts with a letter
+    return f"col_{clean}"
 
-
-def _create_collection(vector_dim: int) -> Collection:
-    # Collection stores chunk text and embedding vector.
+def create_collection_if_not_exists(collection_name: str):
+    """
+    Checks if a specific file's collection exists; if not, creates it.
+    """
+    # Check if exists
+    try:
+        if utility.has_collection(collection_name):
+            return Collection(collection_name)
+    except Exception as e:
+        print(f"⚠️ Error checking collection {collection_name}: {e}")
+    
+    print(f"🆕 Creating new collection bucket: {collection_name}")
+    
+    # 1. Define Fields
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=TEXT_MAX_LENGTH),
-        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=vector_dim),
+        FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=384),
+        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+        FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=1000),
+        FieldSchema(name="type", dtype=DataType.VARCHAR, max_length=100),
+        FieldSchema(name="image_path", dtype=DataType.VARCHAR, max_length=1000),
+        FieldSchema(name="title", dtype=DataType.VARCHAR, max_length=1000),
     ]
-    schema = CollectionSchema(fields=fields, description="RAG document chunks")
-    collection = Collection(name=COLLECTION_NAME, schema=schema)
-    index_params = {
-        "index_type": INDEX_TYPE,
-        "metric_type": METRIC_TYPE,
-        "params": {"nlist": NLIST},
-    }
-    collection.create_index(field_name="embedding", index_params=index_params)
-    return collection
-
-
-def _ensure_collection(vector_dim: Optional[int] = None) -> Collection:
-    _connect()
-    dim = vector_dim or DEFAULT_DIM
-    if utility.has_collection(COLLECTION_NAME):
-        collection = Collection(name=COLLECTION_NAME)
-        embed_field = next(f for f in collection.schema.fields if f.name == "embedding")
-        existing_dim = embed_field.params.get("dim")
-        if existing_dim != dim:
-            raise ValueError(
-                f"Embedding dimension mismatch: expected {existing_dim}, got {dim}."
-            )
-        if not collection.has_index():
-            collection.create_index(
-                field_name="embedding",
-                index_params={
-                    "index_type": INDEX_TYPE,
-                    "metric_type": METRIC_TYPE,
-                    "params": {"nlist": NLIST},
-                },
-            )
+    
+    schema = CollectionSchema(fields, description=f"Collection for {collection_name}")
+    
+    # 2. Create Collection
+    try:
+        collection = Collection(name=collection_name, schema=schema)
+        
+        # 3. Create Index
+        index_params = {
+            "metric_type": "L2",
+            "index_type": "IVF_FLAT",
+            "params": {"nlist": 128},
+        }
+        collection.create_index(field_name="vector", index_params=index_params)
         return collection
-    return _create_collection(dim)
+    except Exception as e:
+        print(f"❌ Failed to create collection '{collection_name}': {e}")
+        # Re-raise so the ingestion pipeline knows it failed
+        raise e
 
+def insert_vectors(chunks, embeddings, metas, filename):
+    """
+    Inserts data into the SPECIFIC collection for the given filename.
+    """
+    if not chunks:
+        return False
 
-def store_chunks(chunks: List[str], embeddings: List[List[float]]) -> int:
-    if not chunks or not embeddings:
-        return 0
-    if len(chunks) != len(embeddings):
-        raise ValueError("Chunks and embeddings must have the same length.")
-    vector_dim = len(embeddings[0]) if embeddings[0] else DEFAULT_DIM
-    collection = _ensure_collection(vector_dim)
-    collection.insert([chunks, embeddings])
-    collection.flush()
-    return len(chunks)
-
-
-def search_similar(query_embedding: List[float], top_k: int = 5) -> List[str]:
-    if not query_embedding:
-        return []
-    collection = _ensure_collection(len(query_embedding))
-    if collection.num_entities == 0:
-        return []
-    collection.load()
-    params = {"metric_type": METRIC_TYPE}
-    if INDEX_TYPE.upper().startswith("IVF"):
-        params["params"] = {"nprobe": NPROBE}
-    results = collection.search(
-        data=[query_embedding],
-        anns_field="embedding",
-        param=params,
-        limit=top_k,
-        output_fields=["text"],
-    )
-    contexts: List[str] = []
-    for hits in results:
-        for hit in hits:
-            text = hit.entity.get("text")
-            if text:
-                contexts.append(text)
-    return contexts
+    # 1. Determine the collection name
+    col_name = sanitize_collection_name(filename)
+    
+    try:
+        collection = create_collection_if_not_exists(col_name)
+        
+        # 2. Prepare Data
+        data = [
+            embeddings,                                  # vector
+            chunks,                                      # text
+            [m.get('source', '') for m in metas],        # source
+            [m.get('type', 'text') for m in metas],      # type
+            [m.get('image_path', '') for m in metas],    # image_path
+            [m.get('title', '') for m in metas]          # title
+        ]
+        
+        # 3. Insert and Flush
+        collection.insert(data)
+        collection.flush()
+        print(f"✅ Inserted {len(chunks)} chunks into collection: {col_name}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Milvus Insert Error for {col_name}: {e}")
+        return False
