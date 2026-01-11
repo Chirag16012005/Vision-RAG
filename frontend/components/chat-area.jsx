@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -8,12 +9,30 @@ import { FileUpload } from "./tabs/file-upload"
 import { UrlIngestion } from "./tabs/url-ingestion"
 import { TopicSearch } from "./tabs/topic-search"
 import { ChatMessages } from "./chat-messages"
-import { sendMessage, addLocalMessage } from "@/store/generalSlicer"
+import {
+  sendMessage,
+  addLocalMessage,
+  fetchConversationHistory,
+  fetchDocuments,
+  clearMessages,
+  clearSelectedDocuments,
+} from "@/store/generalSlicer"
 
 export function ChatArea() {
   const dispatch = useDispatch()
   const { currentConversationId, messages, isSending, selectedDocuments } = useSelector((state) => state.general)
   const hasSelectedDocuments = selectedDocuments.length > 0
+
+  useEffect(() => {
+    if (!currentConversationId) {
+      return
+    }
+
+    dispatch(clearMessages())
+    dispatch(clearSelectedDocuments())
+    dispatch(fetchConversationHistory(currentConversationId))
+    dispatch(fetchDocuments(currentConversationId))
+  }, [dispatch, currentConversationId])
 
   const handleSendMessage = async (e) => {
     e.preventDefault()
