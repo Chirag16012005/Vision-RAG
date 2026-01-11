@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit"
 import axios from "axios"
 
-const BACKEND_URL = "http://localhost:8007"
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 // ==================== CONVERSATION THUNKS ====================
 export const createNewChat = createAsyncThunk("general/createNewChat", async (_, { rejectWithValue }) => {
