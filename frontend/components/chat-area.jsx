@@ -65,7 +65,7 @@ export function ChatArea() {
       </div>
 
       {/* Tabs for Upload, URL, Search */}
-      <Tabs defaultValue="upload" className="flex-1 flex flex-col border-b border-slate-200">
+      <Tabs defaultValue="upload" className="flex flex-col border-b border-slate-200">
         <TabsList className="w-full justify-start px-6 py-4 bg-transparent border-b border-slate-200 rounded-none">
           <TabsTrigger value="upload" className="gap-2">
             📄 Upload File
@@ -92,28 +92,30 @@ export function ChatArea() {
       </Tabs>
 
       {/* Chat Messages */}
-      <ChatMessages messages={messages} isLoading={isSending} />
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <ChatMessages messages={messages} isLoading={isSending} />
 
-      {/* Chat Input */}
-      <form onSubmit={handleSendMessage} className="p-6 border-t border-slate-200">
-        <div className="flex gap-3">
-          <Input
-            placeholder="Ask about your data..."
-            disabled={isSending || !hasSelectedDocuments}
-            className="flex-1"
-          />
-          <Button
-            type="submit"
-            disabled={isSending || !hasSelectedDocuments}
-            className="bg-sky-500 hover:bg-sky-600 text-white"
-          >
-            Send
-          </Button>
-        </div>
-        {!hasSelectedDocuments && (
-          <p className="text-xs text-amber-600 mt-2">Select at least one document to send messages</p>
-        )}
-      </form>
+        {/* Chat Input */}
+        <form onSubmit={handleSendMessage} className="p-6 border-t border-slate-200">
+          <div className="flex gap-3">
+            <Input
+              placeholder="Ask about your data..."
+              disabled={isSending || !hasSelectedDocuments}
+              className="flex-1"
+            />
+            <Button
+              type="submit"
+              disabled={isSending || !hasSelectedDocuments}
+              className="bg-sky-500 hover:bg-sky-600 text-white"
+            >
+              Send
+            </Button>
+          </div>
+          {!hasSelectedDocuments && (
+            <p className="text-xs text-amber-600 mt-2">Select at least one document to send messages</p>
+          )}
+        </form>
+      </div>
     </div>
   )
 }
