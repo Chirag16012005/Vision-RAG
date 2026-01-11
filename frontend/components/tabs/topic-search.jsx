@@ -21,7 +21,7 @@ export function TopicSearch({ conversationId }) {
   const handleIngestSelected = async () => {
     if (selectedUrls.size === 0 || !conversationId) return
 
-    await dispatch(ingestTopic({ topic, conversationId }))
+    await dispatch(ingestTopic({ topic, conversationId, selectedUrls }))
     setSelectedUrls(new Set())
     setTopic("")
     dispatch(clearTopicSearchResults())
