@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit"
 import axios from "axios"
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const BACKEND_URL = "https://hanna-tony-aline.ngrok-free.dev"
 
 // ==================== CONVERSATION THUNKS ====================
 export const createNewChat = createAsyncThunk("general/createNewChat", async (_, { rejectWithValue }) => {
@@ -394,7 +394,7 @@ export const generalSlice = createSlice({
           state.messages.push({
             role: "assistant",
             content: action.payload.response,
-            id: `ai_${Date.now()}`,
+            id: action.payload.message_id || `ai_${Date.now()}`,
           })
         }
       })
