@@ -93,7 +93,11 @@ export function ChatArea() {
 
       {/* Chat Messages */}
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-        <ChatMessages messages={messages} isLoading={isSending} />
+        <ChatMessages
+          messages={messages}
+          isLoading={isSending}
+          conversationId={currentConversationId}
+        />
 
         {/* Chat Input */}
         <form onSubmit={handleSendMessage} className="p-6 border-t border-slate-200">
