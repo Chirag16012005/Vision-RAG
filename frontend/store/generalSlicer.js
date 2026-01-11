@@ -101,11 +101,11 @@ export const searchTopic = createAsyncThunk("general/searchTopic", async ({ topi
 
 export const ingestTopic = createAsyncThunk(
   "general/ingestTopic",
-  async ({ topic, conversationId }, { rejectWithValue }) => {
+  async ({ topic, conversationId, selectedUrls }, { rejectWithValue }) => {
     try {
       const response = await axios.post(
         `${BACKEND_URL}/ingest/search/query?conversation_id=${conversationId}`,
-        { topic },
+        { topic, selected_urls: Array.from(selectedUrls || []) },
         { headers: { "Content-Type": "application/json" }, withCredentials: true },
       )
       return response.data
@@ -114,7 +114,6 @@ export const ingestTopic = createAsyncThunk(
     }
   },
 )
-
 export const fetchDocuments = createAsyncThunk(
   "general/fetchDocuments",
   async (conversationId, { rejectWithValue }) => {
