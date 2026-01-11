@@ -170,6 +170,7 @@ unstructured_inference==1.1.4
 urllib3==2.6.3
 uuid_utils==0.13.0
 uvicorn==0.40.0
+gunicorn
 watchdog==6.0.0
 webencodings==0.5.1
 wrapt==2.0.1
@@ -209,3 +210,4 @@ sentence-transformers
 python-multipart
 llama-parse
 google.generativeai
+
